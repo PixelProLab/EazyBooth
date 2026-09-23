@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-electron/
+out/
+data/
+profiles/
+captures/
+private/
+vendor-installers/
+*.exe
+*.zip
+*.log
+*.tmp
+.env*
+Kiosk Setup.json
+Thumbs.db
+.DS_Store
+
+.npm-cache/
+.evidence/
+*.log
+__pycache__/

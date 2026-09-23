@@ -1,0 +1,46 @@
+{
+  "eventName": "NAMQ × Keeta",
+  "canvas": {
+    "width": 2400,
+    "height": 3600
+  },
+  "welcome": "namq-keeta/welcome.jpeg",
+  "frames": [
+    {
+      "id": "frame-1",
+      "label": "Frame 1",
+      "asset": "namq-keeta/frame-1.png",
+      "geometry": {
+        "opening": {
+          "x": 298,
+          "y": 299,
+          "width": 1804,
+          "height": 2366
+        },
+        "zoom": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "previewMirror": true,
+        "outputMirror": true
+      }
+    },
+    {
+      "id": "frame-2",
+      "label": "Frame 2",
+      "asset": "namq-keeta/frame-2.png",
+      "geometry": {
+        "opening": {
+          "x": 367,
+          "y": 271,
+          "width": 1633,
+          "height": 2270
+        },
+        "zoom": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "previewMirror": true,
+        "outputMirror": true
+      }
+    }
+  ]
+}
