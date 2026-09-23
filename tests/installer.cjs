@@ -40,7 +40,7 @@ for (const f of [
     fs.existsSync(path.join(root, "win-unpacked", "resources", f)),
     `Missing resource ${f}`,
   );
-const setup = path.join(root, "EazyBooth-Setup-1.0.0.exe");
+const setup = path.join(root, `EazyBooth-Setup-${packageData.version}.exe`);
 assert(fs.existsSync(setup));
 const hash = crypto.createHash("sha256").update(fs.readFileSync(setup)).digest("hex");
 const result = spawnSync(process.execPath, ["tests/electron-workflow.cjs"], {

@@ -246,6 +246,103 @@ async function launch() {
     await page.screenshot({ path: path.join(evidence, "branding.png") });
     await page.getByRole("button", { name: "Layout", exact: true }).click();
     await page.screenshot({ path: path.join(evidence, "layout.png") });
+    // Detailed photos exceeded the old data-navigation URL limit. Exercise
+    // actual capture/composition/decode and one-page printing with a large JPEG.
+    const noise = await sharp(crypto.randomBytes(1600 * 1200 * 3), {
+      raw: { width: 1600, height: 1200, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    const large = await page.evaluate(
+      async (bytes) => {
+        const id = await window.booth.begin("frame-1");
+        await window.booth.capture(id, Uint8Array.from(bytes).buffer);
+        const result = await window.booth.print(id, 1, crypto.randomUUID());
+        return { id, result, storage: (await window.booth.settings()).storage };
+      },
+      [...noise],
+    );
+    assert.equal(large.result.status, "accepted");
+    const largeFinal = fs.readFileSync(path.join(large.storage, large.id, "final.jpg"));
+    assert(largeFinal.length > 2 * 1024 * 1024, "fixture must exceed old URL limit");
+    const largeJob = (await app.evaluate(() => globalThis.__jobs)).at(-1);
+    assert.equal(
+      hash(Buffer.from(largeJob.src.split(",")[1], "base64")),
+      hash(largeFinal),
+    );
+    assert.equal(largeJob.pages, 1);
+    checks.push({
+      largePhotoBytes: largeFinal.length,
+      print: "accepted",
+      exactBytes: true,
+      pages: 1,
+    });
+    await page.evaluate(() => window.booth.reset());
+    await app.evaluate(({ dialog }, asset) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [asset] });
+    }, initial.welcome);
+    await page.getByRole("button", { name: "Branding", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Choose background artwork", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Replace background artwork", exact: true })
+      .waitFor();
+    for (const mode of ["background", "camera"]) {
+      await page.getByLabel("Photo layout", { exact: true }).selectOption(mode);
+      await page.getByRole("button", { name: "Save settings", exact: true }).click();
+      await expect
+        .poll(() =>
+          page.evaluate(async () => (await window.booth.settings()).previewMode),
+        )
+        .toBe(mode === "background" ? "branded" : "full");
+      // Give the background a visible camera window and verify saved geometry.
+      if (mode === "background") {
+        await page.getByRole("button", { name: "Layout", exact: true }).click();
+        await page.getByLabel("Camera x", { exact: true }).fill("300");
+        await page.getByLabel("Camera y", { exact: true }).fill("300");
+        await page.getByLabel("Camera width", { exact: true }).fill("1800");
+        await page.getByLabel("Camera height", { exact: true }).fill("2400");
+        await page.getByRole("button", { name: "Save settings", exact: true }).click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              async () => (await window.booth.settings()).geometry.opening.height,
+            ),
+          )
+          .toBe(2400);
+      }
+      await page
+        .getByRole("button", { name: "Lock & return to Welcome", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Touch anywhere to start" }).click();
+      await expect(
+        page.getByRole("button", { name: "Start", exact: true }),
+      ).toBeEnabled();
+      await expect(page.getByRole("heading", { name: "Choose your frame" })).toHaveCount(
+        0,
+      );
+      await page.screenshot({ path: path.join(evidence, `${mode}-only.png`) });
+      await page.getByRole("button", { name: "Start", exact: true }).click();
+      await page.getByRole("button", { name: "Print 1", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Print another copy", exact: true })
+        .waitFor();
+      const job = (await app.evaluate(() => globalThis.__jobs)).at(-1);
+      assert.equal(job.pages, 1);
+      const cfg = await page.evaluate(() => window.booth.settings());
+      assert.equal(cfg.guestFramesEnabled, false);
+      assert.equal(cfg.frameMode, "none");
+      assert.equal(cfg.frames.length, 2);
+      await page.getByRole("button", { name: "Done", exact: true }).click();
+      await page.getByRole("button", { name: "Touch anywhere to start" }).waitFor();
+      checks.push({ mode, frameChooser: false, print: "accepted", pages: 1 });
+      await page.keyboard.press("Control+Shift+A");
+      for (const digit of "135790")
+        await page.getByRole("button", { name: digit, exact: true }).click();
+      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+      await page.getByRole("button", { name: "Branding", exact: true }).click();
+    }
     await page.getByRole("button", { name: "Profiles / Events", exact: true }).click();
     await page.getByLabel("New event name", { exact: true }).fill("Duplicated event");
     await page.getByRole("button", { name: "Duplicate Profile", exact: true }).click();
@@ -267,6 +364,7 @@ async function launch() {
     const restored = await next.evaluate(() => window.booth.settings());
     assert.equal(restored.profileId, duplicate.profileId);
     assert.equal(restored.frames.length, 2);
+    assert.equal(restored.guestFramesEnabled, false);
     assert(restored.frames.every((f) => fs.existsSync(f.asset)));
     assert(fs.existsSync(restored.welcome));
     assert.deepEqual(errors, []);
@@ -290,6 +388,7 @@ async function launch() {
     );
     console.log(JSON.stringify({ status: "PASS", checks, evidence }, null, 2));
   } catch (e) {
+    console.error(e);
     if (app) {
       const p = app.windows()[0];
       if (p && !p.isClosed()) {
@@ -304,7 +403,14 @@ async function launch() {
     }
     throw e;
   } finally {
-    if (app) await app.close();
+    if (app) {
+      await app
+        .evaluate(({ BrowserWindow }) => {
+          for (const window of BrowserWindow.getAllWindows()) window.destroy();
+        })
+        .catch(() => {});
+      await app.close().catch(() => {});
+    }
   }
 })().catch((e) => {
   console.error(e);

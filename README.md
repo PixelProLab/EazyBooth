@@ -4,9 +4,11 @@ Reusable, offline Windows photobooth by Pixel Pro Lab. Install once; create or d
 
 The supplied NAMQ × Keeta welcome artwork and two transparent portrait frames are included as an editable starter profile. A new installation copies them into its private managed profile. Existing installations and events are never overwritten. Create Event starts with neutral EazyBooth branding and no mandatory frame.
 
+Version 1.0.1 fixes large-photo printing that could fail before reaching Windows. Install over 1.0.0 to retain profiles, artwork, PIN and photos.
+
 ## Guest experience
 
-Welcome → choose a frame (when configured) → live preview inside that frame → Start → countdown → saved final → Retake / Done / Print 1 / More Prints. Each frame can have its own camera window and crop. Printing always uses the immutable saved JPEG. A successful submission says **Windows accepted the print job**; it does not report physical completion.
+Welcome → choose a frame (when configured) → live preview inside that frame → Start → countdown → saved final → Retake / Done / Print 1 / More Prints. Branding or Layout → Photo layout selects Camera only, Background with camera window, or Frames. Camera only and Background skip the frame chooser while retaining imported frames for later. Each frame can have its own camera window and crop. Printing always uses the immutable saved JPEG. A successful submission says **Windows accepted the print job**; it does not report physical completion.
 
 ## Operator
 
@@ -29,7 +31,7 @@ npm run build:installer
 npm run test:installer
 ```
 
-Installer output: `out/installer/EazyBooth-Setup-1.0.0.exe`. Do not distribute an unpacked EXE without its sibling files. No cloud account, API, auto-updater or vendor driver is required by the application; camera/printer drivers are installed separately.
+Installer output: `out/installer/EazyBooth-Setup-1.0.1.exe`. Do not distribute an unpacked EXE without its sibling files. No cloud account, API, auto-updater or vendor driver is required by the application; camera/printer drivers are installed separately.
 
 Runtime data: `%APPDATA%\eazybooth`. `EAZYBOOTH_DATA_DIR` provides an isolated test profile. Never point tests at live guest data. Back up the full data directory with the application closed. Upgrades and uninstall preserve this directory.
 

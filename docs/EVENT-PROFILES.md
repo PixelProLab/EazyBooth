@@ -17,7 +17,7 @@ eazybooth/
 
 Create Event uses neutral defaults. Duplicate Profile uses saved settings and physically copies managed artwork into the new event. It never copies photos or receipts. Edit the event name and save. The active profile persists across restart. The fixed photo subfolder is visible in Session & Storage and opens from Saved Photos/Readiness.
 
-Frame-free output works without any artwork. A single frame can be configured, or up to 8 guest-selectable frames. Guest choices take precedence over the single-frame setting. Each choice has a separately editable label and camera geometry. Layout → Edit camera layout for selects the frame being calibrated. The frame is drawn above the camera and never mirrors.
+Frame-free output works without any artwork. A single frame can be configured, or up to 8 guest-selectable frames. Use Photo layout to enable Frames or disable all overlays with Camera only / Background with camera window. Disabling frames keeps their managed artwork and calibration; the saved guestFramesEnabled flag persists across restart and duplication. Older profiles retain their existing behavior. Each choice has a separately editable label and camera geometry. Layout → Edit camera layout for selects the frame being calibrated. The frame is drawn above the camera and never mirrors.
 
 Use transparent PNG at exactly the configured canvas size. This release deliberately rejects mismatched frames; it does not silently rescale them. Select the intended canvas first, then import matching frames. Welcome/background accept still PNG, JPEG and WebP. Imports are decoded before activation, copied and orientation-normalized. Failed imports leave the old active configuration intact. Save commits changes; Discard restores the previous configuration.
 

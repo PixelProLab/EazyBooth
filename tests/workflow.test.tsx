@@ -3,7 +3,7 @@ import { afterEach, beforeEach, it, expect, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { App } from "../src/renderer/App";
-import { defaults } from "../src/shared/settings";
+import { defaults, setPhotoLayout } from "../src/shared/settings";
 import type { API, Settings } from "../src/shared/types";
 const fake = vi.hoisted(() => ({
   opens: 0,
@@ -245,3 +245,26 @@ it("selected frame stays stable across countdown ticks and is sent to the captur
   expect(window.booth.begin).toHaveBeenCalledWith("frame-2");
   expect(fake.opens).toBe(1);
 });
+
+it.each(["camera", "background"] as const)(
+  "%s mode goes straight to camera even with two retained frames",
+  async (mode) => {
+    const s = defaults("C:/private");
+    s.countdown = 1;
+    s.background = "background.png";
+    s.frames = [1, 2].map((n) => ({
+      id: `frame-${n}`,
+      label: `Frame ${n}`,
+      asset: `${n}.png`,
+      geometry: structuredClone(s.geometry),
+    }));
+    setPhotoLayout(s, mode);
+    vi.mocked(window.booth.settings).mockResolvedValue(s);
+    render(<App />);
+    await begin();
+    expect(screen.queryByRole("heading", { name: "Choose your frame" })).toBeNull();
+    await take();
+    expect(window.booth.begin).toHaveBeenCalledWith(undefined);
+    expect(screen.getByRole("button", { name: "Print 1" })).toBeTruthy();
+  },
+);

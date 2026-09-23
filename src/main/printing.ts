@@ -17,14 +17,15 @@ export function paperSize(config: Settings["printer"]) {
   return selphy ? { width: 100000, height: 148000 } : { width: 101600, height: 152400 };
 }
 export function photoPrintHTML(
-  image: Buffer,
+  image: Buffer | null,
   landscape: boolean,
   paper = { width: 101600, height: 152400 },
   fit: "contain" | "cover" = "contain",
 ) {
   const w = (landscape ? paper.height : paper.width) / 1000;
   const h = (landscape ? paper.width : paper.height) / 1000;
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}img{position:fixed;inset:0;display:block;width:100%;height:100%;object-fit:${fit === "cover" ? "cover" : "contain"}}</style></head><body><img src="data:image/jpeg;base64,${image.toString("base64")}"></body></html>`;
+  const source = image ? ` src="data:image/jpeg;base64,${image.toString("base64")}"` : "";
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}img{position:fixed;inset:0;display:block;width:100%;height:100%;object-fit:${fit === "cover" ? "cover" : "contain"}}</style></head><body><img${source}></body></html>`;
 }
 export async function printPhoto(
   image: Buffer,
@@ -39,29 +40,43 @@ export async function printPhoto(
     };
   const win = create();
   let submitted = false;
+  let expired = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   // One watchdog covers window loading, image decoding AND Windows callback.
   const deadline = new Promise<PrintResult>((resolve) => {
-    timer = setTimeout(
-      () =>
-        resolve({
-          status: "unknown",
-          message:
-            "Windows print status is unknown. Check the Windows queue before retrying to avoid duplicate prints.",
-        }),
-      timeout,
-    );
+    timer = setTimeout(() => {
+      expired = true;
+      resolve({
+        status: submitted ? "unknown" : "failed",
+        message: submitted
+          ? "Windows print status is unknown. Check the Windows queue before retrying to avoid duplicate prints."
+          : "The print image could not be prepared in time. Nothing was sent to Windows; retry this saved photo.",
+      });
+    }, timeout);
   });
   const work = async (): Promise<PrintResult> => {
     const landscape = config.orientation === "landscape";
     const paper = paperSize(config);
-    const html = photoPrintHTML(image, landscape, paper, config.fit);
+    // Navigation URLs have a much lower size limit than image data. Large
+    // portrait JPEGs must not be embedded in the URL passed to loadURL.
+    const html = photoPrintHTML(null, landscape, paper, config.fit);
     await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
-    await win.webContents.executeJavaScript('document.querySelector("img").decode()');
-    if (win.isDestroyed())
+    if (expired || win.isDestroyed())
       return {
-        status: "unknown",
-        message: "Print window closed; check Windows queue",
+        status: "failed",
+        message: "Print preparation cancelled; nothing was submitted",
+      };
+    const source = "data:image/jpeg;base64," + image.toString("base64");
+    await win.webContents.executeJavaScript(`(async () => {
+      const image = document.querySelector("img");
+      image.src = ${JSON.stringify(source)};
+      await image.decode();
+      if (!image.naturalWidth || !image.naturalHeight) throw Error("Saved photo could not be decoded");
+    })()`);
+    if (expired || win.isDestroyed())
+      return {
+        status: "failed",
+        message: "Print preparation cancelled; nothing was submitted",
       };
     return new Promise((resolve) => {
       submitted = true;
@@ -89,7 +104,7 @@ export async function printPhoto(
                 }
               : {
                   status: "failed",
-                  message: reason || "Windows rejected the print job",
+                  message: (reason || "Windows rejected the print job").slice(0, 600),
                 },
           ),
       );
@@ -101,7 +116,7 @@ export async function printPhoto(
         status: submitted ? ("unknown" as const) : ("failed" as const),
         message: submitted
           ? "Windows submission could not be confirmed. Check the Windows queue before retrying."
-          : String(e.message || e),
+          : String(e.message || e).slice(0, 600),
       })),
       deadline,
     ]);

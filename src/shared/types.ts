@@ -5,7 +5,14 @@ export interface Rect {
   height: number;
 }
 export interface Settings {
-  frames: { id: string; label: string; asset: string; geometry: Settings["geometry"] }[];
+  guestFramesEnabled?: boolean;
+  frames: {
+    id: string;
+    label: string;
+    asset: string;
+    canvas?: Settings["canvas"];
+    geometry: Settings["geometry"];
+  }[];
   selectedFrameId?: string;
   version: 2;
   profileId: string;

@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Profiles } from "./profiles";
 import { diskStatus, requireSpace } from "./store";
-import { jobPrinter, selectFrame, validate } from "../shared/settings";
+import { jobPrinter, selectFrame, validate, guestFrames } from "../shared/settings";
 import { checkAsset, frameOpening } from "./compositor";
 import { Captures } from "./captures";
 import { printPhoto } from "./printing";
@@ -149,7 +149,7 @@ async function assetHealth() {
       result[kind] = false;
     }
   }
-  for (const frame of store.settings.frames) {
+  for (const frame of guestFrames(store.settings)) {
     try {
       await checkAsset(resolveAsset(frame.asset), true, store.settings.canvas);
     } catch {
@@ -218,7 +218,7 @@ async function boot() {
         /* Readiness reports missing artwork. */
       }
     }
-  protocol.handle("eazy-media", (req) => {
+  protocol.handle("eazy-media", async (req) => {
     try {
       const url = new URL(req.url);
       const file = path.resolve(decodeURIComponent(url.pathname.slice(1)));
@@ -228,7 +228,7 @@ async function boot() {
           !(Date.now() <= unlockedUntil && galleryMedia.has(file)))
       )
         return new Response("Forbidden", { status: 403 });
-      return net.fetch(pathToFileURL(file).href);
+      return await net.fetch(pathToFileURL(file).href);
     } catch {
       return new Response("Missing media", { status: 404 });
     }
@@ -319,7 +319,7 @@ async function boot() {
       if (s.welcome) await checkAsset(resolveAsset(s.welcome), false);
       if (s.previewMode === "branded")
         await checkAsset(resolveAsset(s.background), false);
-      for (const frame of s.frames as typeof store.settings.frames)
+      for (const frame of guestFrames(s))
         await checkAsset(resolveAsset(frame.asset), true, s.canvas);
       requireSpace(s.storage);
       const saved = store.save(s);

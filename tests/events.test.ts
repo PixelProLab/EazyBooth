@@ -4,7 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { Profiles } from "../src/main/profiles";
-import { defaults, validate, jobPrinter } from "../src/shared/settings";
+import {
+  defaults,
+  validate,
+  jobPrinter,
+  selectFrame,
+  setPhotoLayout,
+  guestFrames,
+} from "../src/shared/settings";
 import { composite, checkAsset } from "../src/main/compositor";
 import { photoRect, photoClip, cameraGeometry, drawPhoto } from "../src/shared/geometry";
 import { Captures } from "../src/main/captures";
@@ -227,4 +234,54 @@ it("Print 1 and More Prints have durable request IDs, immutable finals and per-j
   expect(s.printer.copies).toBe(4);
   expect(fs.readFileSync(record.final!)).toEqual(before);
   expect(() => c.print(id, 11, crypto.randomUUID())).toThrow();
+});
+
+it.each(["camera", "background"] as const)(
+  "%s layout ignores retained frame choices and survives profile restart",
+  async (mode) => {
+    const p = new Profiles(temp()),
+      s = structuredClone(p.settings);
+    const source = path.join(p.root, "artwork.png");
+    await frame(source, 1800, 1200);
+    const asset = await p.importAsset(source, "frame", s.canvas);
+    s.frames = [
+      { id: "frame-1", label: "Frame 1", asset, geometry: structuredClone(s.geometry) },
+    ];
+    s.frame = asset;
+    s.background = asset;
+    s.frameMode = "overlay";
+    setPhotoLayout(s, mode);
+    p.save(s);
+    const restored = new Profiles(p.root).settings;
+    expect(restored.frames).toHaveLength(1);
+    expect(guestFrames(restored)).toHaveLength(0);
+    expect(selectFrame(restored).frameMode).toBe("none");
+    expect(selectFrame(restored).previewMode).toBe(
+      mode === "camera" ? "full" : "branded",
+    );
+    expect(() => selectFrame(restored, "frame-1")).toThrow("no guest frame");
+    setPhotoLayout(restored, "frames");
+    expect(selectFrame(validate(restored), "frame-1").frame).toBe(asset);
+  },
+);
+
+it("disabled frames keep original canvas calibration while a frame-free event changes size", () => {
+  const s = defaults(temp());
+  s.frames = [
+    {
+      id: "old",
+      label: "Old portrait",
+      asset: "frame.png",
+      geometry: structuredClone(s.geometry),
+    },
+  ];
+  const saved = validate(s);
+  setPhotoLayout(saved, "camera");
+  saved.canvas = { width: 600, height: 400 };
+  saved.geometry.opening = { x: 0, y: 0, ...saved.canvas };
+  const next = validate(saved);
+  expect(next.frames[0].canvas).toEqual({ width: 1800, height: 1200 });
+  expect(selectFrame(next).canvas).toEqual({ width: 600, height: 400 });
+  setPhotoLayout(next, "frames");
+  expect(() => validate(next)).toThrow("Enabled frames must match");
 });

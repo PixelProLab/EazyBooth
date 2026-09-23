@@ -3,6 +3,7 @@ export function defaults(storage: string): Settings {
   return {
     version: 2,
     frames: [],
+    guestFramesEnabled: true,
     profileId: "default",
     eventName: "My first event",
     canvas: { width: 1800, height: 1200 },
@@ -149,6 +150,8 @@ export function validate(input: unknown): Settings {
   for (const v of [s.welcome, s.frame, s.storage, s.printer.name]) str(v);
   if (!s.storage) throw Error("Storage location is required");
   s.frames ??= [];
+  s.guestFramesEnabled ??= true;
+  bool(s.guestFramesEnabled);
   if (!Array.isArray(s.frames) || s.frames.length > 8)
     throw Error("Use up to 8 guest frame choices");
   const ids = new Set<string>();
@@ -165,8 +168,17 @@ export function validate(input: unknown): Settings {
     ids.add(frame.id);
     str(frame.asset);
     if (!frame.asset) throw Error("Frame artwork is required");
+    frame.canvas ??= structuredClone(s.canvas);
+    if (
+      s.guestFramesEnabled &&
+      (frame.canvas.width !== s.canvas.width || frame.canvas.height !== s.canvas.height)
+    )
+      throw Error(
+        "Enabled frames must match the canvas. Reimport matching frames or choose a frame-free layout.",
+      );
     validate({
       ...s,
+      canvas: frame.canvas,
       frames: [],
       frameMode: "overlay",
       frame: frame.asset,
@@ -177,7 +189,7 @@ export function validate(input: unknown): Settings {
 }
 
 export function selectFrame(s: Settings, id?: string): Settings {
-  if (!s.frames.length) {
+  if (!guestFrames(s).length) {
     if (id) throw Error("This event has no guest frame choices");
     return structuredClone(s);
   }
@@ -191,6 +203,27 @@ export function selectFrame(s: Settings, id?: string): Settings {
     previewMode: s.previewMode === "branded" ? "branded" : "overlay",
     geometry: structuredClone(choice.geometry),
   };
+}
+
+export function guestFrames(s: Settings) {
+  return s.guestFramesEnabled === false ? [] : s.frames;
+}
+
+export type PhotoLayout = "camera" | "background" | "frames";
+export function photoLayout(s: Settings): PhotoLayout {
+  return guestFrames(s).length || s.frameMode === "overlay"
+    ? "frames"
+    : s.previewMode === "branded"
+      ? "background"
+      : "camera";
+}
+export function setPhotoLayout(s: Settings, mode: PhotoLayout) {
+  s.guestFramesEnabled = mode === "frames";
+  s.frameMode = mode === "frames" && !s.frames.length && s.frame ? "overlay" : "none";
+  s.previewMode =
+    mode === "background" ? "branded" : s.frameMode === "overlay" ? "overlay" : "full";
+  // Keep imported artwork and per-frame calibration for a later event switch.
+  delete s.selectedFrameId;
 }
 
 export function jobPrinter(s: Settings, copies = s.printer.copies): Settings["printer"] {

@@ -422,6 +422,49 @@ describe("Windows print adapter", () => {
     });
     expect(win.destroy).toHaveBeenCalled();
   });
+  it("keeps large JPEGs out of navigation URLs and passes the exact image to decoding", async () => {
+    const win = mock(),
+      cfg = defaults(temp()).printer;
+    cfg.name = "HiTi";
+    const image = Buffer.alloc(4 * 1024 * 1024, 173);
+    await printPhoto(image, cfg, () => win);
+    const url = (win.loadURL.mock.calls as unknown as [string][])[0][0];
+    expect(url.length).toBeLessThan(2048);
+    const script = (
+      win.webContents.executeJavaScript.mock.calls as unknown as [string][]
+    )[0][0];
+    expect(script).toContain(image.toString("base64"));
+    expect(script).toContain("await image.decode()");
+  });
+  it("never submits a late load after the preparation deadline", async () => {
+    const win = mock(),
+      cfg = defaults(temp()).printer;
+    cfg.name = "HiTi";
+    let finish!: () => void;
+    win.loadURL.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    expect((await printPhoto(Buffer.from("x"), cfg, () => win, 20)).status).toBe(
+      "failed",
+    );
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(win.webContents.print).not.toHaveBeenCalled();
+    expect(win.webContents.executeJavaScript).not.toHaveBeenCalled();
+  });
+  it("keeps a missing Windows callback uncertain without automatically resending", async () => {
+    const win = mock(),
+      cfg = defaults(temp()).printer;
+    cfg.name = "HiTi";
+    win.webContents.print.mockImplementation(() => {});
+    expect((await printPhoto(Buffer.from("x"), cfg, () => win, 20)).status).toBe(
+      "unknown",
+    );
+    expect(win.webContents.print).toHaveBeenCalledTimes(1);
+  });
   it("does not use a default printer when selection is empty", async () => {
     const create = vi.fn();
     expect(
@@ -441,13 +484,23 @@ describe("Windows print adapter", () => {
       message: "Printer unavailable",
     });
   });
-  it("times out loading as unknown and tears down the print window", async () => {
+  it("bounds load failure text so errors cannot flood the operator UI", async () => {
+    const win = mock(),
+      cfg = defaults(temp()).printer;
+    cfg.name = "HiTi";
+    win.loadURL.mockRejectedValue(Error("ERR_INVALID_URL " + "A".repeat(3000000)));
+    const result = await printPhoto(Buffer.from("x"), cfg, () => win);
+    expect(result.status).toBe("failed");
+    expect(result.message.length).toBeLessThanOrEqual(600);
+    expect(win.webContents.print).not.toHaveBeenCalled();
+  });
+  it("times out preparation as failed without submitting to Windows", async () => {
     const win = mock();
     win.loadURL.mockImplementation(() => new Promise(() => {}));
     const cfg = defaults(temp()).printer;
     cfg.name = "Epson";
     expect((await printPhoto(Buffer.from("x"), cfg, () => win, 20)).status).toBe(
-      "unknown",
+      "failed",
     );
     expect(win.destroy).toHaveBeenCalled();
   });

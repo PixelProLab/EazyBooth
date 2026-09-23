@@ -1,3 +1,4 @@
+import { guestFrames } from "../shared/settings";
 import { useEffect, useState, useRef } from "react";
 import type { Settings, Health, Printer } from "../shared/types";
 import type { Camera } from "./camera";
@@ -129,7 +130,7 @@ export function Admin({
     setBusy(true);
     setMessage("");
     try {
-      const id = await window.booth.begin(settings.frames[0]?.id);
+      const id = await window.booth.begin(guestFrames(settings)[0]?.id);
       const bytes = await camera.capture();
       const result = await window.booth.capture(id, bytes, true);
       if (mounted.current) {
@@ -747,7 +748,7 @@ export function Admin({
                 onClick={async () => {
                   setBusy(true);
                   try {
-                    const id = await window.booth.begin(settings.frames[0]?.id);
+                    const id = await window.booth.begin(guestFrames(settings)[0]?.id);
                     const result = await window.booth.capture(id, await camera.capture());
                     setRaw(result.url);
                     setMessage("Test photo saved using the saved event configuration.");

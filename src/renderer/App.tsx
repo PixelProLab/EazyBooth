@@ -6,7 +6,7 @@ import { Live } from "./Live";
 import { NumericKeypad, Modal } from "./NumericKeypad";
 import { Welcome } from "./EventEditor";
 import { Admin } from "./Admin";
-import { selectFrame } from "../shared/settings";
+import { selectFrame, guestFrames } from "../shared/settings";
 export function App() {
   const [selectedFrame, setSelectedFrame] = useState<string>();
   const [quantityOpen, setQuantityOpen] = useState(false),
@@ -38,7 +38,9 @@ export function App() {
   phaseRef.current = phase;
   const presentation = useMemo(
     () =>
-      settings && selectedFrame && settings.frames.some((f) => f.id === selectedFrame)
+      settings &&
+      selectedFrame &&
+      guestFrames(settings).some((f) => f.id === selectedFrame)
         ? selectFrame(settings, selectedFrame)
         : settings,
     [settings, selectedFrame],
@@ -320,7 +322,7 @@ export function App() {
               setPinOpen(true);
               return;
             }
-            if (settings.frames.length) {
+            if (guestFrames(settings).length) {
               setSelectedFrame(undefined);
               setPhase("frame-selection");
             } else void startCamera();
@@ -369,7 +371,7 @@ export function App() {
                 <h1>Choose your frame</h1>
                 <p>Select a design to see yourself live.</p>
                 <div className="frame-choices">
-                  {settings.frames.map((frame) => (
+                  {guestFrames(settings).map((frame) => (
                     <button
                       className="frame-choice secondary"
                       key={frame.id}

@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import type { Settings } from "../shared/types";
 import { Live } from "./Live";
 import { Modal } from "./NumericKeypad";
-import { selectFrame } from "../shared/settings";
+import {
+  selectFrame,
+  guestFrames,
+  photoLayout,
+  setPhotoLayout,
+  type PhotoLayout,
+} from "../shared/settings";
 type EditProps = {
   draft: Settings;
   update: (fn: (s: Settings) => void) => void;
@@ -155,6 +161,36 @@ export function Welcome({
     </div>
   );
 }
+export function PhotoLayoutChoice({
+  draft,
+  update,
+}: Pick<EditProps, "draft" | "update">) {
+  return (
+    <>
+      <label>
+        Photo layout
+        <select
+          aria-label="Photo layout"
+          value={photoLayout(draft)}
+          onChange={(e) =>
+            update((s) => setPhotoLayout(s, e.target.value as PhotoLayout))
+          }
+        >
+          <option value="camera">Camera only — no frame or background</option>
+          <option value="background">Background with camera window — no frame</option>
+          <option value="frames" disabled={!draft.frames.length && !draft.frame}>
+            Frames — use imported artwork
+          </option>
+        </select>
+      </label>
+      <p className="hint">
+        This controls both live view and the saved print. Camera only and Background skip
+        frame selection. Imported frames stay saved when disabled. Add a frame below to
+        enable Frames.
+      </p>
+    </>
+  );
+}
 export function Branding({ draft, update, fail }: EditProps) {
   const [preview, setPreview] = useState(false),
     [busy, setBusy] = useState(false);
@@ -162,10 +198,11 @@ export function Branding({ draft, update, fail }: EditProps) {
     <div className="admin-grid">
       <section className="card">
         <h2>Make it your event</h2>
+        <PhotoLayoutChoice draft={draft} update={update} />
         <h3>Guest frame choices</h3>
         <p>
-          When choices are present, guests select a frame after Welcome. Up to 8 frames;
-          each has its own camera layout.
+          Frames are optional. When enabled, guests select a frame after Welcome. Up to 8
+          frames; each has its own camera layout.
         </p>
         {draft.frames.map((frame, index) => (
           <div className="asset-row" key={frame.id}>
@@ -212,10 +249,12 @@ export function Branding({ draft, update, fail }: EditProps) {
               if (asset) {
                 const opening = await window.booth.frameOpening(asset);
                 update((s) => {
+                  s.guestFramesEnabled = true;
                   s.frames.push({
                     id: crypto.randomUUID(),
                     label: `Frame ${s.frames.length + 1}`,
                     asset,
+                    canvas: structuredClone(s.canvas),
                     geometry: {
                       ...structuredClone(s.geometry),
                       opening,
@@ -275,22 +314,6 @@ export function Branding({ draft, update, fail }: EditProps) {
           >
             <option value="cover">Cover screen</option>
             <option value="contain">Contain entire image</option>
-          </select>
-        </label>
-        <label>
-          Frame mode
-          <select
-            value={draft.frameMode}
-            onChange={(e) =>
-              update((s) => {
-                s.frameMode = e.target.value as Settings["frameMode"];
-                if (s.frameMode === "none" && s.previewMode === "overlay")
-                  s.previewMode = "full";
-              })
-            }
-          >
-            <option value="none">None</option>
-            <option value="overlay">Overlay Frame</option>
           </select>
         </label>
         {(["welcome", "background", "frame"] as const).map((kind) => (
@@ -396,7 +419,8 @@ export function FrameLayout(
   props: EditProps & { video: HTMLVideoElement | null; active: boolean },
 ) {
   const [id, setId] = useState(props.draft.frames[0]?.id || "");
-  const chosen = props.draft.frames.find((f) => f.id === id) || props.draft.frames[0];
+  const choices = guestFrames(props.draft);
+  const chosen = choices.find((f) => f.id === id) || choices[0];
   const effective = useMemo(
     () => (chosen ? selectFrame(props.draft, chosen.id) : props.draft),
     [props.draft, chosen?.id],
@@ -430,6 +454,9 @@ export function FrameLayout(
               for (const f of s.frames)
                 f.geometry.opening = { x: 0, y: 0, ...next.canvas };
             s.frames.find((f) => f.id === chosen.id)!.geometry = next.geometry;
+            s.guestFramesEnabled = next.guestFramesEnabled;
+            if (next.guestFramesEnabled === false) s.geometry = next.geometry;
+            s.frameMode = next.frameMode === "none" ? "none" : s.frameMode;
             s.previewMode = next.previewMode === "branded" ? "branded" : "full";
           })
         }
@@ -512,21 +539,7 @@ export function LayoutEditor({
           {num("Canvas width", w, (n) => size(n, h), 240, 4096)}
           {num("Canvas height", h, (n) => size(w, n), 240, 4096)}
         </div>
-        <label>
-          Guest live preview mode
-          <select
-            value={draft.previewMode}
-            onChange={(e) =>
-              update((s) => {
-                s.previewMode = e.target.value as Settings["previewMode"];
-              })
-            }
-          >
-            <option value="full">Full Camera</option>
-            <option value="overlay">Camera + Overlay Frame</option>
-            <option value="branded">Branded Stage</option>
-          </select>
-        </label>
+        <PhotoLayoutChoice draft={draft} update={update} />
         <p>
           Drag the camera window to move it. Drag its corner to resize. Full Camera uses
           the whole canvas. Background artwork fills the canvas; use matching dimensions
